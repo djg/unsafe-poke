@@ -8,7 +8,7 @@ fn unsafe_poke_derive(s: Structure) -> proc_macro2::TokenStream {
         _ => false,
     };
 
-    let body = s
+    let poke_body = s
         .variants()
         .iter()
         .enumerate()
@@ -28,6 +28,28 @@ fn unsafe_poke_derive(s: Structure) -> proc_macro2::TokenStream {
             quote!(#acc #pat => { #pokes up })
         });
 
+    let max_size_body = s.variants().iter().fold(quote!(0),
+        |acc, variant| {
+            // compute size of each variant by summing the sizes of its bindings
+            let variant_size = variant
+                .bindings()
+                .iter()
+                .map(|binding| {
+                    let ty = &binding.ast().ty;
+                    quote!(<#ty as unsafe_poke::UnsafePoke>::poke_max_size())
+                })
+                .fold(quote!(0), |acc, x| quote!(#acc + #x));
+            quote!(max(#acc, #variant_size))
+        },
+    );
+
+    let max_size_body = if !is_struct {
+        quote!(4 + #max_size_body)
+    } else {
+        max_size_body
+    };
+
+    
     s.bound_impl(
         quote!(unsafe_poke::UnsafePoke),
         quote!(
@@ -36,8 +58,13 @@ fn unsafe_poke_derive(s: Structure) -> proc_macro2::TokenStream {
                 UP: unsafe_poke::UnsafePokable
             {
                 match *self {
-                    #body
+                    #poke_body
                 }
+            }
+
+            fn poke_max_size() -> usize {
+                use std::cmp::max;
+                #max_size_body
             }
         ),
     )

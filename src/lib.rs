@@ -1,4 +1,4 @@
-use std::{mem, ptr};
+use std::{mem, ptr, marker::PhantomData};
 
 pub unsafe trait UnsafePokable {
     fn poke_i8(self, v: i8) -> Self;
@@ -52,19 +52,34 @@ unsafe impl UnsafePokable for *mut u8 {
 
 pub trait UnsafePoke {
     fn poke<UP: UnsafePokable>(&self, r: UP) -> UP;
+    fn poke_max_size() -> usize;
 }
 
 impl UnsafePoke for () {
     fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
         up
     }
+
+    fn poke_max_size() -> usize {
+        0
+    }
 }
 
 macro_rules! impl_unsafe_poke_prim {
-    ($ty:ty => $mem:ident $($cast:tt)*) => {
+    ($ty:ty => $mem:ident as $cast:ty) => {
+        impl_unsafe_poke_prim!{ __IMPL__ $ty, $mem, $cast }
+    };
+    ($ty:ty => $mem:ident) => {
+        impl_unsafe_poke_prim!{ __IMPL__ $ty, $mem, $ty }
+    };
+    (__IMPL__ $ty:ty, $mem:ident, $cast:ty) => { 
         impl UnsafePoke for $ty {
             fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
-                up.$mem(*self $($cast)*)
+                up.$mem(*self as $cast)
+            }
+
+            fn poke_max_size() -> usize {
+                mem::size_of::<$cast>()
             }
         }
     }
@@ -84,13 +99,6 @@ impl_unsafe_poke_prim!(  u64 => poke_u64);
 impl_unsafe_poke_prim!(  f32 => poke_f32);
 impl_unsafe_poke_prim!(  f64 => poke_f64);
 
-impl UnsafePoke for [u8] {
-    fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
-        let up = up.poke_u64(self.len() as u64);
-        up.poke_bytes(self)
-    }
-}
-
 impl<T> UnsafePoke for Option<T>
 where
     T: UnsafePoke,
@@ -103,12 +111,20 @@ where
             0u8.poke(up)
         }
     }
+
+    fn poke_max_size() -> usize {
+        1 + T::poke_max_size()
+    }
 }
 
 // Does not require T: UnsafePoke.
 impl<T> UnsafePoke for [T; 0] {
     fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
         up
+    }
+
+    fn poke_max_size() -> usize {
+        0
     }
 }
 
@@ -117,6 +133,10 @@ macro_rules! impl_unsafe_poke_arrays {
         $(impl<T: UnsafePoke> UnsafePoke for [T; $len] {
             fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
                 self.iter().fold(up, |up, e| e.poke(up))
+            }
+
+            fn poke_max_size() -> usize {
+                T::poke_max_size() * $len
             }
         })+
     }
@@ -136,6 +156,10 @@ macro_rules! impl_unsafe_poke_tuples {
                 $(let up = self.$n.poke(up);
                 )+
                 up
+            }
+
+            fn poke_max_size() -> usize {
+                0 $( + $name::poke_max_size())+
             }
         })+
     }
@@ -160,11 +184,13 @@ impl_unsafe_poke_tuples! {
     (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12 13 T13 14 T14 15 T15)
 }
 
-impl<T: UnsafePoke> UnsafePoke for Vec<T> {
+impl<T> UnsafePoke for PhantomData<T> {
     fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
-        let len = self.len() as u64;
-        let up = len.poke(up);
-        self.iter().fold(up, |up, e| e.poke(up))
+        up
+    }
+
+    fn poke_max_size() -> usize {
+        0
     }
 }
 

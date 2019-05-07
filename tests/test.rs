@@ -1,6 +1,6 @@
 use bincode::serialize;
 use serde_derive::Serialize;
-use std::fmt::Debug;
+use std::{fmt::Debug, marker::PhantomData};
 use unsafe_poke::UnsafePoke;
 use unsafe_poke_derive::UnsafePoke;
 
@@ -108,14 +108,6 @@ fn test_basic_struct() {
 }
 
 #[test]
-fn test_vec() {
-    let v: Vec<u8> = vec![];
-    the_same(v);
-    the_same(vec![1u64]);
-    the_same(vec![1u64, 2, 3, 4, 5, 6]);
-}
-
-#[test]
 fn test_enum() {
     #[derive(Serialize, PartialEq, Debug, UnsafePoke)]
     enum TestEnum {
@@ -130,12 +122,6 @@ fn test_enum() {
     the_same(TestEnum::Args(4, 5));
     the_same(TestEnum::AnotherNoArg);
     the_same(TestEnum::StructLike { x: 4, y: 3.14159 });
-    the_same(vec![
-        TestEnum::NoArg,
-        TestEnum::OneArg(5),
-        TestEnum::AnotherNoArg,
-        TestEnum::StructLike { x: 4, y: 1.4 },
-    ]);
 }
 
 #[test]
@@ -164,4 +150,16 @@ fn test_enum_cstyle() {
     the_same(BorderStyle::Ridge);
     the_same(BorderStyle::Inset);
     the_same(BorderStyle::Outset);
+}
+
+#[test]
+fn test_phantom_data() {
+    struct Bar;
+    #[derive(Debug, PartialEq, Eq, Serialize, UnsafePoke)]
+    struct Foo {
+        x: u32,
+        y: u32,
+        _marker: PhantomData<Bar>,
+    }
+    the_same(Foo { x: 19, y: 42, _marker: PhantomData });
 }
