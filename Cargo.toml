@@ -5,9 +5,14 @@ authors = ["Dan Glastonbury <dan.glastonbury@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+euclid = { version = "*", features = ["serde"], optional = true }
 unsafe-poke-derive = { version = "*", path = "./unsafe-poke-derive" }
 
 [dev-dependencies]
 bincode = "1.1"
 serde = "1.0"
 serde_derive = "1.0"
+
+[features]
+default = []
+extras = ["euclid"]

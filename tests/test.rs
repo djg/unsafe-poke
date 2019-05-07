@@ -161,5 +161,37 @@ fn test_phantom_data() {
         y: u32,
         _marker: PhantomData<Bar>,
     }
-    the_same(Foo { x: 19, y: 42, _marker: PhantomData });
+    the_same(Foo {
+        x: 19,
+        y: 42,
+        _marker: PhantomData,
+    });
+}
+
+#[cfg(feature = "extras")]
+mod extra_tests {
+    use super::*;
+    use euclid::{Point2D, Rect, SideOffsets2D, Size2D, Transform3D, Vector2D};
+    use std::mem::size_of;
+
+    #[test]
+    fn euclid_types() {
+        the_same(Point2D::<f32>::new(1.0, 2.0));
+        assert_eq!(Point2D::<f32>::poke_max_size(), 2 * size_of::<f32>());
+
+        the_same(Rect::<f32>::new(
+            Point2D::<f32>::new(0.0, 0.0),
+            Size2D::<f32>::new(100.0, 80.0),
+        ));
+        assert_eq!(Rect::<f32>::poke_max_size(), 4 * size_of::<f32>());
+
+        the_same(SideOffsets2D::<f32>::new(0.0, 10.0, -1.0, -10.0));
+        assert_eq!(SideOffsets2D::<f32>::poke_max_size(), 4 * size_of::<f32>());
+
+        the_same(Transform3D::<f32>::identity());
+        assert_eq!(Transform3D::<f32>::poke_max_size(), 16 * size_of::<f32>());
+
+        the_same(Vector2D::<f32>::new(1.0, 2.0));
+        assert_eq!(Vector2D::<f32>::poke_max_size(), 2 * size_of::<f32>());
+    }
 }

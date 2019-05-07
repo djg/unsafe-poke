@@ -1,5 +1,8 @@
 use std::{mem, ptr, marker::PhantomData};
 
+#[cfg(feature = "extras")]
+mod euclid;
+
 pub unsafe trait UnsafePokable {
     fn poke_i8(self, v: i8) -> Self;
     fn poke_i16(self, v: i16) -> Self;
