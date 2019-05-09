@@ -1,12 +1,12 @@
 [package]
 name = "unsafe-poke"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Dan Glastonbury <dan.glastonbury@gmail.com>"]
 edition = "2018"
 
 [dependencies]
 euclid = { version = "*", features = ["serde"], optional = true }
-unsafe-poke-derive = { version = "*", path = "./unsafe-poke-derive" }
+unsafe-poke-derive = { version = "0.2", path = "./unsafe-poke-derive" }
 
 [dev-dependencies]
 bincode = "1.1"

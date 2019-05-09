@@ -1,7 +1,7 @@
 use bincode::serialize;
 use serde_derive::Serialize;
 use std::{fmt::Debug, marker::PhantomData};
-use unsafe_poke::UnsafePoke;
+use unsafe_poke::{UnsafePod, UnsafePoke};
 use unsafe_poke_derive::UnsafePoke;
 
 fn bincode_encode<V>(element: &V) -> Vec<u8>
@@ -17,7 +17,7 @@ where
 {
     let mut v = Vec::<u8>::with_capacity(1000);
     let old_ptr = v.as_mut_ptr();
-    let new_ptr = element.poke(old_ptr);
+    let new_ptr = unsafe { element.poke(old_ptr) };
     let poke_size = new_ptr as usize - old_ptr as usize;
     unsafe {
         v.set_len(poke_size);
@@ -165,6 +165,24 @@ fn test_phantom_data() {
         x: 19,
         y: 42,
         _marker: PhantomData,
+    });
+}
+
+#[test]
+fn test_pod() {
+    #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+    struct Bar {
+        a: u32,
+        b: u32,
+        c: u32,
+    }
+
+    unsafe impl UnsafePod for Bar {}
+
+    the_same(Bar {
+        a: 2,
+        b: 4,
+        c: 42,
     });
 }
 

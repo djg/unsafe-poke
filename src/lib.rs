@@ -3,46 +3,41 @@ use std::{mem, ptr, marker::PhantomData};
 #[cfg(feature = "extras")]
 mod euclid;
 
+// Due to a lack of specialization, `Pod` is used to opt into `memcpy` behavior
+// because a blanket impl for `Copy` doesn't allow specialization for `()`,
+// `Option<T: Copy>`, etc.
+pub unsafe trait UnsafePod: Copy {}
+
+unsafe impl UnsafePod for bool {}
+
+unsafe impl UnsafePod for i8 {}
+unsafe impl UnsafePod for i16 {}
+unsafe impl UnsafePod for i32 {}
+unsafe impl UnsafePod for i64 {}
+unsafe impl UnsafePod for isize {}
+
+unsafe impl UnsafePod for u8 {}
+unsafe impl UnsafePod for u16 {}
+unsafe impl UnsafePod for u32 {}
+unsafe impl UnsafePod for u64 {}
+unsafe impl UnsafePod for usize {}
+
+unsafe impl UnsafePod for f32 {}
+unsafe impl UnsafePod for f64 {}
+
+unsafe impl UnsafePod for () {}
+
 pub unsafe trait UnsafePokable {
-    fn poke_i8(self, v: i8) -> Self;
-    fn poke_i16(self, v: i16) -> Self;
-    fn poke_i32(self, v: i32) -> Self;
-    fn poke_i64(self, v: i64) -> Self;
-    fn poke_u8(self, v: u8) -> Self;
-    fn poke_u16(self, v: u16) -> Self;
-    fn poke_u32(self, v: u32) -> Self;
-    fn poke_u64(self, v: u64) -> Self;
-    fn poke_f32(self, v: f32) -> Self;
-    fn poke_f64(self, v: f64) -> Self;
+    fn poke_pod<T: UnsafePod>(self, v: T) -> Self;
     fn poke_bytes(self, v: &[u8]) -> Self;
 }
 
-macro_rules! impl_ptr_write {
-    ($($mem:ident: $ty:ty),*) => {
-        $(fn $mem(self, v: $ty) -> Self {
-            unsafe {
-                ptr::write(self as *mut _, v);
-                self.add(mem::size_of::<$ty>())
-            }
-        })*
-    };
-    ($($mem:ident: $ty:ty,)*) => {
-        impl_ptr_write!{$($mem: $ty),*}
-    }
-}
-
 unsafe impl UnsafePokable for *mut u8 {
-    impl_ptr_write! {
-        poke_i8: i8,
-        poke_i16: i16,
-        poke_i32: i32,
-        poke_i64: i64,
-        poke_u8: u8,
-        poke_u16: u16,
-        poke_u32: u32,
-        poke_u64: u64,
-        poke_f32: f32,
-        poke_f64: f64
+    fn poke_pod<T: UnsafePod>(self, v: T) -> Self {
+        unsafe {
+            ptr::copy_nonoverlapping(&v as *const T as *const u8, self, mem::size_of::<T>());
+            self.add(mem::size_of::<T>())
+        }
     }
 
     fn poke_bytes(self, v: &[u8]) -> Self {
@@ -54,59 +49,25 @@ unsafe impl UnsafePokable for *mut u8 {
 }
 
 pub trait UnsafePoke {
-    fn poke<UP: UnsafePokable>(&self, r: UP) -> UP;
+    unsafe fn poke<UP: UnsafePokable>(&self, up: UP) -> UP;
     fn poke_max_size() -> usize;
 }
 
-impl UnsafePoke for () {
-    fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
-        up
+impl<T: UnsafePod> UnsafePoke for T {
+    unsafe fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
+        up.poke_pod(*self)
     }
 
     fn poke_max_size() -> usize {
-        0
+        mem::size_of::<T>()
     }
 }
-
-macro_rules! impl_unsafe_poke_prim {
-    ($ty:ty => $mem:ident as $cast:ty) => {
-        impl_unsafe_poke_prim!{ __IMPL__ $ty, $mem, $cast }
-    };
-    ($ty:ty => $mem:ident) => {
-        impl_unsafe_poke_prim!{ __IMPL__ $ty, $mem, $ty }
-    };
-    (__IMPL__ $ty:ty, $mem:ident, $cast:ty) => { 
-        impl UnsafePoke for $ty {
-            fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
-                up.$mem(*self as $cast)
-            }
-
-            fn poke_max_size() -> usize {
-                mem::size_of::<$cast>()
-            }
-        }
-    }
-}
-
-impl_unsafe_poke_prim!( bool => poke_u8 as u8);
-impl_unsafe_poke_prim!(isize => poke_i64 as i64);
-impl_unsafe_poke_prim!(   i8 => poke_i8);
-impl_unsafe_poke_prim!(  i16 => poke_i16);
-impl_unsafe_poke_prim!(  i32 => poke_i32);
-impl_unsafe_poke_prim!(  i64 => poke_i64);
-impl_unsafe_poke_prim!(usize => poke_u64 as u64);
-impl_unsafe_poke_prim!(   u8 => poke_u8);
-impl_unsafe_poke_prim!(  u16 => poke_u16);
-impl_unsafe_poke_prim!(  u32 => poke_u32);
-impl_unsafe_poke_prim!(  u64 => poke_u64);
-impl_unsafe_poke_prim!(  f32 => poke_f32);
-impl_unsafe_poke_prim!(  f64 => poke_f64);
 
 impl<T> UnsafePoke for Option<T>
 where
     T: UnsafePoke,
 {
-    fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
+    unsafe fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
         if let Some(ref value) = self {
             let up = 1u8.poke(up);
             value.poke(up)
@@ -122,7 +83,7 @@ where
 
 // Does not require T: UnsafePoke.
 impl<T> UnsafePoke for [T; 0] {
-    fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
+    unsafe fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
         up
     }
 
@@ -134,7 +95,7 @@ impl<T> UnsafePoke for [T; 0] {
 macro_rules! impl_unsafe_poke_arrays {
     ($($len:tt)+) => {
         $(impl<T: UnsafePoke> UnsafePoke for [T; $len] {
-            fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
+            unsafe fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
                 self.iter().fold(up, |up, e| e.poke(up))
             }
 
@@ -155,7 +116,7 @@ impl_unsafe_poke_arrays! {
 macro_rules! impl_unsafe_poke_tuples {
     ($(($($n:tt $name:ident)+))+) => {
         $(impl<$($name: UnsafePoke),+> UnsafePoke for ($($name,)+) {
-            fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
+            unsafe fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
                 $(let up = self.$n.poke(up);
                 )+
                 up
@@ -188,7 +149,7 @@ impl_unsafe_poke_tuples! {
 }
 
 impl<T> UnsafePoke for PhantomData<T> {
-    fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
+    unsafe fn poke<UP: UnsafePokable>(&self, up: UP) -> UP {
         up
     }
 
@@ -196,4 +157,3 @@ impl<T> UnsafePoke for PhantomData<T> {
         0
     }
 }
-

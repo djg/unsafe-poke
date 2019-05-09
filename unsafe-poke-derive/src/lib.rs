@@ -53,7 +53,7 @@ fn unsafe_poke_derive(s: Structure) -> proc_macro2::TokenStream {
     s.bound_impl(
         quote!(unsafe_poke::UnsafePoke),
         quote!(
-            fn poke<UP>(&self, up: UP) -> UP
+            unsafe fn poke<UP>(&self, up: UP) -> UP
             where
                 UP: unsafe_poke::UnsafePokable
             {
